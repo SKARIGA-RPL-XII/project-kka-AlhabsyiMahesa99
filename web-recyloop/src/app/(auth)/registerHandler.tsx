@@ -8,6 +8,7 @@ export const handleRegister = async (email: string, password: string, fullName: 
       options: {
         data: {
           full_name: fullName,
+          role: "user",
         },
       },
     });
