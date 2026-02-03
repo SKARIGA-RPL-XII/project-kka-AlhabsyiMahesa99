@@ -1,6 +1,9 @@
 import React from 'react'
+import { useRouter } from 'next/navigation'
 
 function section4() {
+  const router = useRouter();
+
   return (
     <section className="py-32 bg-white">
         <div className="mx-auto max-w-360 px-30">
@@ -26,6 +29,7 @@ function section4() {
 
             <div className="mt-10">
               <button
+                onClick={() => router.push("/login")}
                 className="rounded-xl bg-[#299E63] px-10 py-4 text-lg font-semibold cursor-pointer
           text-white transition
           hover:bg-[#248a56]"
