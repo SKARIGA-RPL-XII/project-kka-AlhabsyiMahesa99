@@ -58,7 +58,7 @@ export default function UserDashboard() {
               <div className="h-2 w-2 rounded-full bg-green-400 animate-pulse"></div>
             </div>
             <div className="mt-4">
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wider font-poppins">{stat.title}</p>
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider font-poppins">{stat.title}</p>
               <h3 className="text-xl font-bold text-[#222D33] mt-1 flex items-baseline gap-1 font-poppins">
                 {stat.value} 
                 <span className="text-xs font-normal text-gray-400">{stat.unit}</span>
