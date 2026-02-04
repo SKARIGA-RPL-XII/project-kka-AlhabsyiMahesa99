@@ -9,7 +9,7 @@ import {
   Gift, 
   UserCircle, 
   LogOut,
-  Bell // Ikon baru untuk Notifikasi
+  Bell 
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useRouter } from "next/navigation";
