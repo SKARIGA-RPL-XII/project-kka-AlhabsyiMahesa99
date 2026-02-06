@@ -1,3 +1,4 @@
+"use client";
 import SidebarUser from "@/components/sidebar/SidebarUser";
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {
