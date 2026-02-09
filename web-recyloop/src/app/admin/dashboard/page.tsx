@@ -1,14 +1,5 @@
 import React from "react";
-import { 
-  Users, 
-  PackageCheck, 
-  ArrowUpRight, 
-  AlertCircle, 
-  TrendingUp,
-  Database,
-  Trophy,
-  BarChart3
-} from "lucide-react";
+import { Users, PackageCheck, ArrowUpRight, AlertCircle, TrendingUp, Database, Trophy, BarChart3 } from "lucide-react";
 
 export default function AdminDashboard() {
   return (

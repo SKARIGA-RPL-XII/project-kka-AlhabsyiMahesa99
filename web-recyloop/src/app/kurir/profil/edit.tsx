@@ -1,15 +1,15 @@
 "use client";
 import React, { useState, useEffect } from 'react';
-import { User, Mail, Phone, MapPin, Camera, Save, Map, Building } from 'lucide-react';
+import { User, Mail, Phone, MapPin, Camera, Save, Map, Building, Truck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
-export default function SettingProfil() {
+export default function CourierSettingProfile() {
   const [loading, setLoading] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
 
-  // 1. State untuk Form Data
+  // State Form Data Kurir
   const [formData, setFormData] = useState({
     full_name: '',
     phone: '',
@@ -22,7 +22,6 @@ export default function SettingProfil() {
     avatar_url: ''
   });
 
-  // 2. Ambil data profil saat halaman dibuka
   useEffect(() => {
     fetchProfile();
   }, []);
@@ -51,14 +50,13 @@ export default function SettingProfil() {
           longitude: data.longitude,
           avatar_url: data.avatar_url || ''
         });
-        setPreviewUrl(data.avatar_url || `https://ui-avatars.com/api/?name=${data.full_name}&background=299E63&color=fff`);
+        setPreviewUrl(data.avatar_url || `https://ui-avatars.com/api/?name=${data.full_name}&background=2563eb&color=fff`);
       }
     } catch (error) {
       console.error("Error loading profile:", error);
     }
   };
 
-  // 3. Fungsi Get Location (GPS)
   const getLocation = () => {
     setIsLocating(true);
     if (!navigator.geolocation) {
@@ -78,21 +76,20 @@ export default function SettingProfil() {
           latitude,
           longitude,
           address: data.display_name,
-          district: data.address.suburb || data.address.village || data.address.county || '',
+          district: data.address.suburb || data.address.village || data.address.municipality || '',
           city: data.address.city || data.address.regency || ''
         }));
       } catch (err) {
-        console.error(err);
+        console.error("Geocoding error:", err);
       } finally {
         setIsLocating(false);
       }
     }, () => {
-      alert("Gagal mengambil lokasi");
+      alert("Gagal mengambil lokasi. Pastikan GPS aktif.");
       setIsLocating(false);
     });
   };
 
-  // 4. Handle Save (Update Profile & Upload Foto)
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -103,7 +100,6 @@ export default function SettingProfil() {
 
       let currentAvatarUrl = formData.avatar_url;
 
-      // Proses Upload Foto jika ada file baru
       if (selectedFile) {
         const fileExt = selectedFile.name.split('.').pop();
         const fileName = `${user.id}/${Date.now()}.${fileExt}`;
@@ -121,7 +117,6 @@ export default function SettingProfil() {
         currentAvatarUrl = publicUrl;
       }
 
-      // Update Tabel Profiles
       const { error: updateError } = await supabase
         .from('profiles')
         .update({
@@ -138,7 +133,7 @@ export default function SettingProfil() {
         .eq('id', user.id);
 
       if (updateError) throw updateError;
-      alert("Profil berhasil diperbarui!");
+      alert("Profil Kurir berhasil diperbarui!");
     } catch (error: any) {
       alert(error.message);
     } finally {
@@ -146,7 +141,6 @@ export default function SettingProfil() {
     }
   };
 
-  // Handle Pilih File Gambar
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -160,7 +154,7 @@ export default function SettingProfil() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-[#222D33]">Pengaturan Profil</h1>
         <p className="text-gray-500 mt-1">
-          Lengkapi data diri dan alamat untuk memudahkan penjemputan sampah.
+          Kelola informasi publik dan area operasional Anda.
         </p>
       </div>
 
@@ -168,21 +162,21 @@ export default function SettingProfil() {
         onSubmit={handleSave}
         className="grid grid-cols-1 lg:grid-cols-3 gap-8 text-black"
       >
-        {/* Kolom Kiri: Foto Profil */}
+        {/* Kolom Kiri: Avatar */}
         <div className="lg:col-span-1">
           <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col items-center text-center">
             <div className="relative group">
-              <div className="w-32 h-32 rounded-full bg-gray-100 border-4 border-[#299E63]/20 overflow-hidden">
+              <div className="w-32 h-32 rounded-full bg-gray-100 border-4 border-blue-100 overflow-hidden shadow-inner">
                 <img
                   src={
                     previewUrl ||
-                    "https://ui-avatars.com/api/?name=User&background=299E63&color=fff"
+                    `https://ui-avatars.com/api/?name=${formData.full_name}&background=2563eb&color=fff`
                   }
                   alt="Avatar"
                   className="w-full h-full object-cover"
                 />
               </div>
-              <label className="absolute bottom-0 right-0 bg-[#299E63] p-2 rounded-full text-white cursor-pointer shadow-lg hover:scale-110 transition-transform">
+              <label className="absolute bottom-0 right-0 bg-blue-600 p-2 rounded-full text-white cursor-pointer shadow-lg hover:bg-blue-700 transition-all hover:scale-110 active:scale-95">
                 <Camera size={18} />
                 <input
                   type="file"
@@ -193,16 +187,18 @@ export default function SettingProfil() {
               </label>
             </div>
             <h2 className="mt-4 font-bold text-lg text-black">
-              {formData.full_name || "User Name"}
+              {formData.full_name || "Partner Kurir"}
             </h2>
-            <p className="text-sm text-gray-400">Nasabah Member</p>
+            <div className="mt-2 px-4 py-1 bg-blue-50 text-blue-600 text-xs font-bold rounded-full uppercase tracking-wider">
+              Verified Partner
+            </div>
           </div>
         </div>
 
-        {/* Kolom Rerengat: Form Data */}
+        {/* Kolom Kanan: Form Data */}
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-5">
-            <h3 className="text-lg font-bold text-black border-l-4 border-[#299E63] pl-3">
+            <h3 className="text-lg font-bold text-black border-l-4 border-blue-600 pl-3">
               Data Pribadi
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -217,12 +213,12 @@ export default function SettingProfil() {
                   />
                   <input
                     type="text"
-                    placeholder="Contoh: Rafi Putra"
+                    placeholder="Contoh: Budi Santoso"
                     value={formData.full_name}
                     onChange={(e) =>
                       setFormData({ ...formData, full_name: e.target.value })
                     }
-                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-[#299E63]/20 focus:border-[#299E63] outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-blue-50 focus:border-blue-600 outline-none transition-all"
                   />
                 </div>
               </div>
@@ -243,7 +239,7 @@ export default function SettingProfil() {
                     onChange={(e) =>
                       setFormData({ ...formData, phone: e.target.value })
                     }
-                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-[#299E63]/20 focus:border-[#299E63] outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-blue-50 focus:border-blue-600 outline-none transition-all"
                   />
                 </div>
               </div>
@@ -270,28 +266,26 @@ export default function SettingProfil() {
 
           <div className="bg-white p-8 rounded-3xl border border-gray-100 shadow-sm space-y-5">
             <div className="flex justify-between items-center">
-              <h3 className="text-lg font-bold text-black border-l-4 border-[#299E63] pl-3">
-                Alamat Penjemputan
-              </h3>
-
+              <div className="text-lg font-bold text-blue-600 border-l-4 border-blue-600 pl-3">
+                <h3 className="text-lg font-bold">Wilayah Operasional</h3>
+              </div>
               <button
                 type="button"
                 onClick={getLocation}
                 disabled={isLocating}
-                className="cursor-pointer text-[10px] font-black text-[#299E63] flex items-center gap-1.5 bg-[#299E63]/10 px-3 py-1.5 rounded-xl hover:bg-[#299E63]/20 transition-all active:scale-95"
+                className="cursor-pointer text-[10px] font-black text-blue-600 flex items-center gap-2 bg-blue-50 px-4 py-2 rounded-xl hover:bg-blue-100 transition-all active:scale-95 disabled:opacity-50"
               >
                 <MapPin
-                  size={12}
-                  strokeWidth={3}
-                  className={isLocating ? "animate-bounce" : ""}
+                  size={14}
+                  className={isLocating ? "animate-ping" : ""}
                 />
-                {isLocating ? "MENCARI..." : "GUNAKAN LOKASI SAAT INI"}
+                {isLocating ? "MENGUNCI GPS..." : "UPDATE TITIK KOORDINAT"}
               </button>
             </div>
 
-            <div className="space-y-2 mt-2">
+            <div className="space-y-2">
               <label className="text-xs font-bold text-gray-500 uppercase ml-1">
-                Alamat Lengkap
+                Alamat Domisili / Pangkalan
               </label>
 
               <div className="relative">
@@ -301,11 +295,12 @@ export default function SettingProfil() {
                 />
                 <textarea
                   rows={3}
+                  placeholder="Masukkan alamat lengkap Anda..."
                   value={formData.address}
                   onChange={(e) =>
                     setFormData({ ...formData, address: e.target.value })
                   }
-                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-[#299E63]/20 focus:border-[#299E63] outline-none transition-all"
+                  className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-blue-50 focus:border-blue-600 outline-none transition-all"
                 ></textarea>
               </div>
             </div>
@@ -326,7 +321,7 @@ export default function SettingProfil() {
                     onChange={(e) =>
                       setFormData({ ...formData, district: e.target.value })
                     }
-                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-[#299E63]/20 focus:border-[#299E63] outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-blue-50 focus:border-blue-600 outline-none transition-all"
                   />
                 </div>
               </div>
@@ -345,7 +340,7 @@ export default function SettingProfil() {
                     onChange={(e) =>
                       setFormData({ ...formData, city: e.target.value })
                     }
-                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-2 focus:ring-[#299E63]/20 focus:border-[#299E63] outline-none transition-all"
+                    className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-transparent rounded-2xl focus:bg-white focus:ring-4 focus:ring-blue-50 focus:border-blue-600 outline-none transition-all"
                   />
                 </div>
               </div>
@@ -356,7 +351,7 @@ export default function SettingProfil() {
             <button
               type="submit"
               disabled={loading}
-              className="cursor-pointer flex items-center gap-2 bg-[#299E63] hover:bg-[#238b56] text-white font-bold px-10 py-4 rounded-2xl transition-all shadow-lg shadow-[#299E63]/20 active:scale-95 disabled:opacity-70"
+              className="cursor-pointer flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold px-10 py-4 rounded-2xl transition-all shadow-lg shadow-blue-600/20 active:scale-95 disabled:opacity-70"
             >
               {loading ? (
                 <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>

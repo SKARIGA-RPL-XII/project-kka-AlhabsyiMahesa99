@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, MapPin, Truck, Scale, Coins, Calendar, Info,CheckCircle2,Clock,Package } from "lucide-react";
+import { ArrowLeft, MapPin, Truck, Scale, Coins, Calendar, Info, CheckCircle2, Clock, Package, Phone } from "lucide-react"; // Tambah Phone icon
 import { supabase } from "@/lib/supabase";
 
 export default function DetailSetoran() {
@@ -18,7 +18,8 @@ export default function DetailSetoran() {
         .select(`
           *,
           waste_categories(name),
-          profiles:user_id(full_name, phone)
+          user_info:user_id(full_name, phone),
+          kurir_info:kurir_id(full_name, phone) 
         `)
         .eq('id', id)
         .single();
@@ -74,7 +75,6 @@ export default function DetailSetoran() {
               }`}>{step.label}</p>
             </div>
           ))}
-          {/* Progress Line Background */}
           <div className="absolute top-5 left-0 w-full h-0.5 bg-gray-100 z-0" />
         </div>
       </div>
@@ -129,15 +129,25 @@ export default function DetailSetoran() {
             <h3 className="font-bold text-[#222D33] flex items-center gap-2">
               <Truck size={18} className="text-blue-500" /> Info Kurir
             </h3>
-            {data.courier_id ? (
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold">
-                  K
+            
+            {/* LOGIKA INFO KURIR */}
+            {data.kurir_id && data.kurir_info ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-600 font-bold uppercase">
+                    {data.kurir_info.full_name?.substring(0, 1)}
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-[#222D33]">{data.kurir_info.full_name}</p>
+                    <p className="text-[10px] text-gray-400">Kurir Recyloop</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-bold text-[#222D33]">Driver Recycle</p>
-                  <p className="text-[10px] text-gray-400">Sedang bertugas</p>
-                </div>
+                <a 
+                  href={`tel:${data.kurir_info.phone}`}
+                  className="flex items-center justify-center gap-2 w-full py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100 transition-colors"
+                >
+                  <Phone size={14} /> Hubungi Kurir
+                </a>
               </div>
             ) : (
               <div className="text-xs text-gray-400 italic bg-gray-50 p-3 rounded-lg text-center">
