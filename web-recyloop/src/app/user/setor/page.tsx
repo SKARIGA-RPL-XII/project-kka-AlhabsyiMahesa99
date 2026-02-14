@@ -6,6 +6,11 @@ import { supabase } from "@/lib/supabase";
 
 export default function SetorSampah() {
   const router = useRouter();
+
+  const ITEMS_PER_PAGE = 5;
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalData, setTotalData] = useState(0);
+  const totalPages = Math.ceil(totalData / ITEMS_PER_PAGE);
   
   // State Management untuk data real dari DB] ---
   const [pickups, setPickups] = useState<any[]>([]);
@@ -31,35 +36,67 @@ export default function SetorSampah() {
   // Fetch Data & Logic Stats Real-time] ---
   const fetchPickups = async () => {
     setLoading(true);
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
     if (user) {
-      const { data, error } = await supabase
-        .from('pickups')
-        .select(`
-          *,
-          waste_categories(name)
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      // Hitung range
+      const from = (currentPage - 1) * ITEMS_PER_PAGE;
+      const to = from + ITEMS_PER_PAGE - 1;
+
+      const { data, error, count } = await supabase
+        .from("pickups")
+        .select(
+          `
+        *,
+        waste_categories(name)
+      `,
+          { count: "exact" },
+        ) // ambil total data
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false })
+        .range(from, to); // pagination supabase
 
       if (data) {
         setPickups(data);
-        
-        // Kalkulasi stats otomatis dari data yang ditarik
-        const totalWeight = data.reduce((acc, curr) => acc + (curr.total_weight || curr.estimated_weight || 0), 0);
-        const pendingCount = data.filter(p => p.status === 'pending').length;
-        
-        setStats({
-          total: data.length,
-          weight: totalWeight,
-          pending: pendingCount
-        });
+        setTotalData(count || 0);
+
+        // Stats Mini TETAP dihitung dari SEMUA data
+        // Jadi kita fetch ulang TANPA pagination khusus stats
+        const { data: allData } = await supabase
+          .from("pickups")
+          .select("*")
+          .eq("user_id", user.id);
+
+        if (allData) {
+          const totalWeight = allData.reduce(
+            (acc, curr) =>
+              acc + (curr.total_weight || curr.estimated_weight || 0),
+            0,
+          );
+
+          const pendingCount = allData.filter(
+            (p) => p.status === "pending",
+          ).length;
+
+          setStats({
+            total: allData.length,
+            weight: totalWeight,
+            pending: pendingCount,
+          });
+        }
       }
+
       if (error) console.error("Error fetching pickups:", error.message);
     }
+
     setLoading(false);
   };
+
+  useEffect(() => {
+    fetchPickups();
+  }, [currentPage]);
 
   // Fungsi Hapus - Proteksi hanya status 'pending'] ---
   const handleDelete = async (id: string) => {
@@ -82,10 +119,6 @@ export default function SetorSampah() {
     }
   };
 
-  useEffect(() => {
-    fetchPickups();
-  }, []);
-
   const getStatusStyle = (status: string) => {
     switch (status) {
       case 'completed': return 'bg-green-100 text-green-700';
@@ -103,9 +136,11 @@ export default function SetorSampah() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-[#222D33]">Data Setoran</h1>
-          <p className="text-gray-500 mt-1">Pantau dan kelola riwayat setoran sampahmu.</p>
+          <p className="text-gray-500 mt-1">
+            Pantau dan kelola riwayat setoran sampahmu.
+          </p>
         </div>
-        <button 
+        <button
           onClick={() => router.push("/user/setor/tambah")}
           className="flex items-center justify-center gap-2 bg-[#299E63] hover:bg-[#238b56] text-white font-bold px-6 py-3 rounded-xl transition-all shadow-lg shadow-[#299E63]/20 cursor-pointer active:scale-95"
         >
@@ -117,24 +152,42 @@ export default function SetorSampah() {
       {/* Stats Mini - [Data diambil dari state stats] */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="bg-green-100 text-[#299E63] p-3 rounded-xl"><Package size={24} /></div>
+          <div className="bg-green-100 text-[#299E63] p-3 rounded-xl">
+            <Package size={24} />
+          </div>
           <div>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Total Setoran</p>
-            <p className="text-xl font-bold text-[#222D33]">{stats.total} Kali</p>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+              Total Setoran
+            </p>
+            <p className="text-xl font-bold text-[#222D33]">
+              {stats.total} Kali
+            </p>
           </div>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="bg-blue-100 text-blue-600 p-3 rounded-xl"><Recycle size={24} /></div>
+          <div className="bg-blue-100 text-blue-600 p-3 rounded-xl">
+            <Recycle size={24} />
+          </div>
           <div>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Berat Total</p>
-            <p className="text-xl font-bold text-[#222D33]">{stats.weight.toFixed(1)} Kg</p>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+              Berat Total
+            </p>
+            <p className="text-xl font-bold text-[#222D33]">
+              {stats.weight.toFixed(1)} Kg
+            </p>
           </div>
         </div>
         <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm flex items-center gap-4">
-          <div className="bg-[#299E63]/20 text-[#299E63] p-3 rounded-xl"><Clock size={24} /></div>
+          <div className="bg-[#299E63]/20 text-[#299E63] p-3 rounded-xl">
+            <Clock size={24} />
+          </div>
           <div>
-            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Menunggu</p>
-            <p className="text-xl font-bold text-[#222D33]">{stats.pending} Request</p>
+            <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">
+              Menunggu
+            </p>
+            <p className="text-xl font-bold text-[#222D33]">
+              {stats.pending} Request
+            </p>
           </div>
         </div>
       </div>
@@ -145,10 +198,13 @@ export default function SetorSampah() {
           <h3 className="font-bold text-[#222D33]">Riwayat Aktivitas</h3>
           <div className="flex items-center gap-3">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-              <input 
-                type="text" 
-                placeholder="Cari ID..." 
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
+                size={16}
+              />
+              <input
+                type="text"
+                placeholder="Cari ID..."
                 className="pl-10 pr-4 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#299E63]/20 focus:border-[#299E63] transition-all text-black"
               />
             </div>
@@ -160,9 +216,13 @@ export default function SetorSampah() {
 
         <div className="overflow-x-auto">
           {loading ? (
-            <div className="p-10 text-center text-gray-400 animate-pulse">Memuat data transaksi...</div>
+            <div className="p-10 text-center text-gray-400 animate-pulse">
+              Memuat data transaksi...
+            </div>
           ) : pickups.length === 0 ? (
-            <div className="p-10 text-center text-gray-400 italic">Belum ada riwayat setoran.</div>
+            <div className="p-10 text-center text-gray-400 italic">
+              Belum ada riwayat setoran.
+            </div>
           ) : (
             <table className="w-full text-left border-collapse">
               <thead className="bg-gray-50/50 text-gray-400 text-sm uppercase tracking-widest font-bold">
@@ -177,50 +237,68 @@ export default function SetorSampah() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {pickups.map((item) => (
-                  <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
+                  <tr
+                    key={item.id}
+                    className="hover:bg-gray-50/50 transition-colors"
+                  >
                     <td className="px-6 py-4">
                       {/* [Tampilan ID & Tanggal Dinamis] */}
-                      <div className="text-sm font-bold text-[#222D33]">{formatId(item.id)}</div>
-                      <div className="text-[10px] text-gray-400 italic">{formatDate(item.created_at)}</div>
+                      <div className="text-sm font-bold text-[#222D33]">
+                        {formatId(item.id)}
+                      </div>
+                      <div className="text-[12px] text-gray-400 italic">
+                        {formatDate(item.created_at)}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-sm text-gray-600 font-medium">
-                        {/* [Ambil data dari join table waste_categories] */}
-                        {item.waste_categories?.name || "Kategori"}
+                      {/* [Ambil data dari join table waste_categories] */}
+                      {item.waste_categories?.name || "Kategori"}
                     </td>
                     <td className="px-6 py-4 text-sm font-bold text-[#222D33]">
-                        {/* [Berat menyesuaikan status] */}
-                        {item.status === 'completed' ? item.total_weight : item.estimated_weight} Kg
+                      {/* [Berat menyesuaikan status] */}
+                      {item.status === "completed"
+                        ? item.total_weight
+                        : item.estimated_weight}{" "}
+                      Kg
                     </td>
                     <td className="px-6 py-4">
-                        <span className="text-sm font-bold text-[#299E63]">+{item.total_points_earned || 0}</span>
+                      <span className="text-sm font-bold text-[#299E63]">
+                        +{item.total_points_earned || 0}
+                      </span>
                     </td>
                     <td className="px-6 py-4">
-                      <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusStyle(item.status)}`}>
-                        {item.status.replace('_', ' ')}
+                      <span
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${getStatusStyle(item.status)}`}
+                      >
+                        {item.status.replace("_", " ")}
                       </span>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center justify-center gap-2">
                         {/* [Navigasi Detail] */}
-                        <button 
-                          onClick={() => router.push(`/user/setor/detail/${item.id}`)}
-                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer" 
+                        <button
+                          onClick={() =>
+                            router.push(`/user/setor/detail/${item.id}`)
+                          }
+                          className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer"
                           title="Detail"
                         >
                           <Eye size={18} />
                         </button>
-                        
+
                         {/* [Tombol Hapus Kondisional (Hanya Pending)] */}
-                        {item.status === 'pending' ? (
-                          <button 
+                        {item.status === "pending" ? (
+                          <button
                             onClick={() => handleDelete(item.id)}
-                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer" 
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                             title="Batalkan Setoran"
                           >
                             <Trash2 size={18} />
                           </button>
                         ) : (
-                          <span className="text-[10px] text-gray-300 font-medium italic select-none">Locked</span>
+                          <span className="text-[10px] text-gray-300 font-medium italic select-none">
+                            Locked
+                          </span>
                         )}
                       </div>
                     </td>
@@ -228,6 +306,49 @@ export default function SetorSampah() {
                 ))}
               </tbody>
             </table>
+          )}
+          {totalPages > 1 && (
+            <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200">
+              <p className="text-sm text-gray-400">
+                Halaman {currentPage} dari {totalPages}
+              </p>
+
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((p) => p - 1)}
+                  className="
+      cursor-pointer px-4 py-2 text-sm font-semibold rounded-lg border
+      transition-all duration-200
+      disabled:opacity-40 disabled:cursor-not-allowed
+      bg-white text-gray-700 border-gray-200
+      hover:bg-gray-50 hover:border-gray-300
+      active:scale-95
+    "
+                >
+                  Prev
+                </button>
+
+                <span className="px-3 text-sm font-medium text-gray-400">
+                  {currentPage} / {totalPages}
+                </span>
+
+                <button
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((p) => p + 1)}
+                  className="
+      cursor-pointer px-4 py-2 text-sm font-semibold rounded-lg border
+      transition-all duration-200
+      disabled:opacity-40 disabled:cursor-not-allowed
+      bg-[#299E63] text-white border-[#299E63]
+      hover:bg-[#238b56]
+      active:scale-95
+    "
+                >
+                  Next
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>

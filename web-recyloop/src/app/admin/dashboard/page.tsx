@@ -1,7 +1,11 @@
+"use client";
 import React from "react";
+import { useRouter } from "next/navigation";
 import { Users, PackageCheck, ArrowUpRight, AlertCircle, TrendingUp, Database, Trophy, BarChart3 } from "lucide-react";
 
 export default function AdminDashboard() {
+  const router = useRouter();
+
   return (
     <div className="font-poppins space-y-8">
       <div>
@@ -45,10 +49,10 @@ export default function AdminDashboard() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
           <h3 className="font-bold text-gray-800 mb-6">Aksi Cepat</h3>
           <div className="space-y-3">
-            <QuickActionButton label="Update Harga Sampah" icon={<Database size={18}/>} />
-            <QuickActionButton label="Tambah Katalog Reward" icon={<Trophy size={18}/>} />
-            <QuickActionButton label="Verifikasi Kurir Baru" icon={<Users size={18}/>} />
-            <QuickActionButton label="Download Laporan Bulanan" icon={<BarChart3 size={18}/>} />
+            <QuickActionButton label="Update Harga Sampah" icon={<Database size={18}/>} onClick={() => router.push("/admin/master")} />
+            <QuickActionButton label="Tambah Katalog Reward" icon={<Trophy size={18}/>} onClick={() => router.push("/admin/reward")} />
+            <QuickActionButton label="Verifikasi Kurir Baru" icon={<Users size={18}/>} onClick={() => router.push("/admin/users")} />
+            <QuickActionButton label="Download Laporan Bulanan" icon={<BarChart3 size={18}/>} onClick={() => router.push("/admin/laporan")} />
           </div>
         </div>
       </div>
@@ -78,9 +82,12 @@ function StatCard({ title, value, icon, color, grow }: any) {
   );
 }
 
-function QuickActionButton({ label, icon }: any) {
+function QuickActionButton({ label, icon, onClick }: any) {
   return (
-    <button className="w-full flex items-center justify-between p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-all group">
+    <button
+      onClick={onClick}
+      className="cursor-pointer w-full flex items-center justify-between p-4 border border-gray-100 rounded-xl hover:bg-gray-50 transition-all group"
+    >
       <div className="flex items-center gap-3 text-gray-600 group-hover:text-[#299E63]">
         {icon}
         <span className="text-sm font-medium">{label}</span>
