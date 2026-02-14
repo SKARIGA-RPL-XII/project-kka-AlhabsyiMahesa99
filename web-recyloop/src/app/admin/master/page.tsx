@@ -69,7 +69,7 @@ export default function ManajemenDataMaster() {
         </div>
         <button
           onClick={() => router.push("/admin/master/tambah")}
-          className="flex items-center gap-2 bg-[#299E63] hover:bg-[#238b56] text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-[#299E63]/20"
+          className="cursor-pointer flex items-center gap-2 bg-[#299E63] hover:bg-[#238b56] text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-[#299E63]/20"
         >
           <Plus size={20} />
           Tambah Kategori
