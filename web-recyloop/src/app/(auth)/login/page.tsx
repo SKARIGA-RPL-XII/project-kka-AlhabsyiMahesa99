@@ -9,6 +9,7 @@ export default function AuthPage() {
   const router = useRouter();
   const [mode, setMode] = useState<"login" | "register">("login");
   const [loading, setLoading] = useState(false);
+  const [authMessage, setAuthMessage] = useState<string | null>(null);
 
   // State Form
   const [fullName, setFullName] = useState("");
@@ -23,6 +24,7 @@ export default function AuthPage() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setAuthMessage(null);
 
     if (mode === "register") {
       // --- LOGIKA REGISTER ---
@@ -50,7 +52,8 @@ export default function AuthPage() {
       const { role, error } = await handleLogin(identifier, password);
 
       if (error) {
-        alert("Login Gagal: " + error);
+        // Tampilkan alasan gagal login langsung di card agar user tahu status akunnya.
+        setAuthMessage(error);
       } else {
         // Redirect berdasarkan role dari database
         if (role === "admin") {
@@ -84,6 +87,12 @@ export default function AuthPage() {
               : "Mulai kontribusi untuk lingkungan hari ini"}
           </p>
         </div>
+
+        {mode === "login" && authMessage && (
+          <div className="mt-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+            <p className="text-sm font-medium text-red-700">{authMessage}</p>
+          </div>
+        )}
 
         <form className="mt-10 space-y-6" onSubmit={onSubmit}>
           {/* Input Nama Lengkap (Khusus Register) */}
@@ -189,6 +198,7 @@ export default function AuthPage() {
                 onClick={() => {
                   setMode("register");
                   setIdentifier(""); // Reset biar bersih
+                  setAuthMessage(null);
                 }}
                 className="text-[#299E63] font-semibold cursor-pointer hover:underline"
               >
@@ -202,6 +212,7 @@ export default function AuthPage() {
                 onClick={() => {
                   setMode("login");
                   setIdentifier("");
+                  setAuthMessage(null);
                 }}
                 className="text-[#299E63] font-semibold cursor-pointer hover:underline"
               >
