@@ -15,23 +15,23 @@ function section1() {
   };
 
   return (
-    <section className="relative w-full h-[calc(100vh-64px)] bg-[#299E63] overflow-hidden">
+    <section className="relative w-full min-h-[calc(100vh-64px)] bg-[#299E63] overflow-hidden flex items-center">
         {/* Shape kanan */}
-        <div className="absolute right-0 top-0 h-full w-[50%] hidden md:block">
+        <div className="absolute right-0 top-0 h-full w-[50%] hidden md:block pointer-events-none">
           <Image
             src="/LandingRight.png"
             alt="Landing Right Shape"
             fill
-            className="hidden md:block object-contain object-right"
+            className="object-contain object-right"
             priority
           />
         </div>
 
         {/* Content */}
-        <div className="relative z-10 mx-auto max-w-360 px-30 py-28">
+        <div className="relative z-10 mx-auto w-full max-w-360 px-4 sm:px-6 lg:px-10 xl:px-20 py-16 sm:py-20 lg:py-28">
           <div className="max-w-xl">
             <h1
-              className="text-6xl leading-tight"
+              className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl leading-tight"
               style={{ fontFamily: "var(--font-audiowide)" }}
             >
               <span className="block text-white">WELCOME TO</span>
@@ -39,21 +39,21 @@ function section1() {
             </h1>
 
             <p
-              className="mt-6 text-lg text-white"
+              className="mt-4 sm:mt-6 text-base sm:text-lg text-white"
               style={{ fontFamily: "var(--font-bai-jamjuree)" }}
             >
               Kelola sampah rumah tangga lebih mudah dan rapi hanya dengan satu
               klik.
             </p>
 
-            <div className="mt-8 flex gap-4 font-poppins">
+            <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row gap-3 sm:gap-4 font-poppins">
             {/* Registrasi */}
             <button
               onClick={() => router.push("/login")}
               className="
-                rounded-xl bg-white px-6 py-3 text-lg font-semibold text-black
+                w-full sm:w-auto rounded-xl bg-white px-5 sm:px-6 py-3 text-sm sm:text-base lg:text-lg font-semibold text-black
                 transition-all duration-300
-                hover:bg-[#1f7f52] hover:text-white hover:scale-105 hover:shadow-xl cursor-pointer
+                hover:scale-105 hover:shadow-xl active:scale-95 cursor-pointer
               "
             >
               Registrasi
@@ -63,9 +63,9 @@ function section1() {
             <button
               onClick={handleWhatsApp}
               className="
-                rounded-xl bg-white px-6 py-3 text-lg font-semibold text-black
+                w-full sm:w-auto rounded-xl bg-white px-5 sm:px-6 py-3 text-sm sm:text-base lg:text-lg font-semibold text-black
                 transition-all duration-300
-                hover:bg-[#1f7f52] hover:text-white hover:scale-105 hover:shadow-xl cursor-pointer
+                hover:scale-105 hover:shadow-xl active:scale-95 cursor-pointer
               "
             >
               Kontak Kami
