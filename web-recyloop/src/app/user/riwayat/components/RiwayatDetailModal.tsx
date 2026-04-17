@@ -109,7 +109,7 @@ export function RiwayatDetailModal({ selectedDetail, onClose }: Props) {
                 <User size={14} /> {courier?.full_name || "Belum ditentukan"}
               </p>
               <p className="inline-flex items-center gap-2 text-blue-700">
-                <Phone size={14} /> {courier?.phone || "-"}
+                <Phone size={14} className="ml-3" /> {courier?.phone || "-"}
               </p>
             </div>
           </div>

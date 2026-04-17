@@ -1,5 +1,5 @@
 import React from "react";
-import { UserPlus, X } from "lucide-react";
+import { Eye, EyeOff, UserPlus, X } from "lucide-react";
 
 export function AddCourierModal({
   open,
@@ -23,6 +23,8 @@ export function AddCourierModal({
   creating: boolean;
 }) {
   if (!open) return null;
+
+  const [showPassword, setShowPassword] = React.useState(false);
 
   return (
     // Add Courier Modal
@@ -68,15 +70,24 @@ export function AddCourierModal({
 
           <div>
             <label className="text-xs font-bold uppercase tracking-wider text-gray-500">Password</label>
+            <div className="relative mt-2">
             <input
               value={form.password}
               onChange={(e) => onChange("password", e.target.value)}
-              type="password"
+              type={showPassword ? "text" : "password"}
               required
               minLength={6}
               className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-black outline-none focus:border-[#299E63] focus:ring-2 focus:ring-[#299E63]/20"
               placeholder="Minimal 6 karakter"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-700"
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+            </div>
           </div>
 
           <div>
