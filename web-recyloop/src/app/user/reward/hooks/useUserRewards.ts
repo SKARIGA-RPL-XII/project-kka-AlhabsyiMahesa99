@@ -1,42 +1,29 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
-import { RedemptionHistory, Reward, UserProfile } from "../types/reward";
-
-const ITEMS_PER_PAGE = 5;
+import { RedemptionHistory } from "../types/reward";
+import { userDashboardKeys } from "@/app/user/dashboard/hooks/dashboardQueries";
+import { userProfileKeys } from "@/app/user/profil/hooks/profileQueries";
+import {
+  USER_REWARD_HISTORY_ITEMS_PER_PAGE,
+  fetchRewardHistory,
+  fetchUserRewardBootstrap,
+  getCurrentUserId,
+  userRewardKeys,
+} from "./rewardQueries";
 
 export function useUserRewards() {
-  // State user login dan profil poin
-  const [userId, setUserId] = useState<string | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-
-  // State daftar reward aktif
-  const [rewards, setRewards] = useState<Reward[]>([]);
-
-  // State history penukaran user
-  const [history, setHistory] = useState<RedemptionHistory[]>([]);
-  const [totalRedeemedAmount, setTotalRedeemedAmount] = useState(0);
-
   // State pagination history
   const [historyPage, setHistoryPage] = useState(1);
-  const [totalHistoryData, setTotalHistoryData] = useState(0);
-  const totalHistoryPages = Math.ceil(totalHistoryData / ITEMS_PER_PAGE);
-
   // State filter katalog
   const [activeCategory, setActiveCategory] = useState("Semua");
-
   // State detail card yang sedang dibuka
   const [expandedRewardId, setExpandedRewardId] = useState<number | null>(null);
-
   // State detail redemption dari history
   const [selectedHistory, setSelectedHistory] = useState<RedemptionHistory | null>(null);
-
-  // State loading UI
-  const [loading, setLoading] = useState(true);
-  const [historyLoading, setHistoryLoading] = useState(true);
   const [processingRewardId, setProcessingRewardId] = useState<number | null>(null);
-
-  // State feedback pesan sukses/error
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const queryClient = useQueryClient();
 
   // Helper format rupiah
   const formatRupiah = (value: number) =>
@@ -64,132 +51,29 @@ export function useUserRewards() {
     return Array.isArray(value) ? (value[0] ?? null) : value;
   };
 
-  // Ambil profil user aktif
-  const fetchProfile = useCallback(async (currentUserId: string) => {
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, full_name, total_points")
-      .eq("id", currentUserId)
-      .single();
+  const bootstrapQuery = useQuery({
+    queryKey: userRewardKeys.bootstrap,
+    queryFn: fetchUserRewardBootstrap,
+    staleTime: 60 * 1000,
+  });
 
-    if (error || !data) {
-      setMessage({ type: "error", text: "Gagal memuat profil user." });
-      return;
-    }
+  const historyQuery = useQuery({
+    queryKey: userRewardKeys.history(historyPage),
+    queryFn: async () => {
+      const userId = bootstrapQuery.data?.userId ?? (await getCurrentUserId());
+      return fetchRewardHistory(userId, historyPage);
+    },
+    enabled: !!bootstrapQuery.data?.userId,
+    staleTime: 30 * 1000,
+  });
 
-    setProfile(data as UserProfile);
-  }, []);
-
-  // Ambil reward yang bisa ditukar user (hanya aktif + stok tersedia)
-  const fetchRewards = useCallback(async () => {
-    const { data, error } = await supabase
-      .from("rewards")
-      .select(
-        "id, title, description, reward_category, partner_name, redemption_note, fulfillment_type, points_required, amount_value, stock, image_url, is_active",
-      )
-      .eq("is_active", true)
-      .gt("stock", 0)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      setMessage({ type: "error", text: `Gagal memuat reward: ${error.message}` });
-      return;
-    }
-
-    setRewards((data as Reward[]) || []);
-  }, []);
-
-  // Ambil history redeem user dengan pagination
-  const fetchHistory = useCallback(async (currentUserId: string, page: number) => {
-    setHistoryLoading(true);
-
-    const from = (page - 1) * ITEMS_PER_PAGE;
-    const to = from + ITEMS_PER_PAGE - 1;
-
-    const { data, error, count } = await supabase
-      .from("redemptions")
-      .select(
-        "id, created_at, points_spent, amount_added, fulfillment_status, fulfillment_code, rewards:rewards!redemptions_reward_id_fkey(title, reward_category, partner_name, redemption_note, fulfillment_type)",
-        { count: "exact" },
-      )
-      .eq("user_id", currentUserId)
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      setHistory([]);
-      setTotalHistoryData(0);
-      setHistoryLoading(false);
-      return;
-    }
-
-    setHistory((data as RedemptionHistory[]) || []);
-    setTotalHistoryData(count || 0);
-    setHistoryLoading(false);
-  }, []);
-
-  // Ambil total nominal redeem user untuk ringkasan
-  const fetchTotalRedeemedAmount = useCallback(async (currentUserId: string) => {
-    const { data, error } = await supabase
-      .from("redemptions")
-      .select("amount_added")
-      .eq("user_id", currentUserId)
-      .eq("status", "completed");
-
-    if (error) {
-      setTotalRedeemedAmount(0);
-      return;
-    }
-
-    const totalAmount = (data || []).reduce((acc, item) => acc + (item.amount_added || 0), 0);
-    setTotalRedeemedAmount(totalAmount);
-  }, []);
-
-  // Bootstrap awal halaman
-  const bootstrapData = useCallback(async () => {
-    setLoading(true);
-    setMessage(null);
-
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setMessage({ type: "error", text: "Sesi user tidak ditemukan. Silakan login ulang." });
-      setLoading(false);
-      return;
-    }
-
-    setUserId(user.id);
-
-    await Promise.all([
-      fetchProfile(user.id),
-      fetchRewards(),
-      fetchHistory(user.id, 1),
-      fetchTotalRedeemedAmount(user.id),
-    ]);
-
-    setLoading(false);
-  }, [fetchProfile, fetchRewards, fetchHistory, fetchTotalRedeemedAmount]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      bootstrapData();
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [bootstrapData]);
-
-  // Reload history saat page berubah
-  useEffect(() => {
-    if (!userId) return;
-
-    const timer = setTimeout(() => {
-      fetchHistory(userId, historyPage);
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [fetchHistory, historyPage, userId]);
+  const userId = bootstrapQuery.data?.userId ?? null;
+  const profile = bootstrapQuery.data?.profile ?? null;
+  const rewards = useMemo(() => bootstrapQuery.data?.rewards ?? [], [bootstrapQuery.data?.rewards]);
+  const totalRedeemedAmount = bootstrapQuery.data?.totalRedeemedAmount ?? 0;
+  const history = historyQuery.data?.rows ?? [];
+  const totalHistoryData = historyQuery.data?.totalData ?? 0;
+  const totalHistoryPages = Math.max(1, Math.ceil(totalHistoryData / USER_REWARD_HISTORY_ITEMS_PER_PAGE));
 
   // Ambil daftar kategori unik dari reward aktif
   const categories = useMemo(() => {
@@ -318,13 +202,11 @@ export function useUserRewards() {
           : "Redeem berhasil. Reward diproses manual oleh admin.",
       });
 
-      // 6) Refresh data agar UI langsung sinkron
       setHistoryPage(1);
       await Promise.all([
-        fetchProfile(userId),
-        fetchRewards(),
-        fetchHistory(userId, 1),
-        fetchTotalRedeemedAmount(userId),
+        queryClient.invalidateQueries({ queryKey: userRewardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: userDashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: userProfileKeys.all }),
       ]);
     } catch (error: unknown) {
       const errorMessage =
@@ -338,7 +220,6 @@ export function useUserRewards() {
   return {
     // data
     profile,
-    rewards,
     filteredRewards,
     categories,
     history,
@@ -346,8 +227,8 @@ export function useUserRewards() {
     selectedHistory,
 
     // ui state
-    loading,
-    historyLoading,
+    loading: bootstrapQuery.isLoading,
+    historyLoading: historyQuery.isLoading,
     processingRewardId,
     message,
     activeCategory,

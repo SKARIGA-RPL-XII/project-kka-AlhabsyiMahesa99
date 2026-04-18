@@ -1,13 +1,26 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Recycle, AlertCircle, ChevronRight, Leaf, MapPin, Upload, X, MessageSquareText } from "lucide-react";
-import { supabase } from "@/lib/supabase"; 
+import { supabase } from "@/lib/supabase";
+import { userDashboardKeys } from "@/app/user/dashboard/hooks/dashboardQueries";
+import { userProfileKeys } from "@/app/user/profil/hooks/profileQueries";
+import { userRiwayatKeys } from "@/app/user/riwayat/hooks/riwayatQueries";
+import { userQueryKeys } from "@/app/user/queryKeys";
+
+type WasteCategory = {
+  id: string;
+  name: string;
+  image_url: string | null;
+  points_per_kg: number | null;
+};
 
 export default function SetorSampah() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<WasteCategory[]>([]);
   const [selectedKategori, setSelectedKategori] = useState("");
   const [berat, setBerat] = useState("");
   const [foto, setFoto] = useState<File | null>(null);
@@ -17,38 +30,62 @@ export default function SetorSampah() {
   const [editAlamat, setEditAlamat] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Ambil Kategori dari Database
+  const categoriesQuery = useQuery({
+    queryKey: userQueryKeys.wasteCategories.all,
+    queryFn: async () => {
+      const { data, error } = await supabase.from("waste_categories").select("*").order("name", { ascending: true });
+
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const addressQuery = useQuery({
+    queryKey: userQueryKeys.pickupAddress.all,
+    queryFn: async () => {
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) throw userError;
+      if (!user) return "Alamat belum diatur di profil";
+
+      const { data, error } = await supabase.from("profiles").select("address").eq("id", user.id).single();
+
+      if (error) throw error;
+      return data?.address || "Alamat belum diatur di profil";
+    },
+    staleTime: 60 * 1000,
+  });
+
   useEffect(() => {
-    const fetchCategories = async () => {
-      const { data, error } = await supabase
-        .from('waste_categories')
-        .select('*')
-        .order('name', { ascending: true });
+    if (categoriesQuery.data) {
+      setCategories(categoriesQuery.data);
+    }
+  }, [categoriesQuery.data]);
 
-      if (data) setCategories(data);
-      if (error) console.error("Error fetching categories:", error.message);
-    };
-
-    fetchCategories();
-  }, []);
-
-  // Ambil alamat otomatis dari profil
   useEffect(() => {
-    const fetchUserAddress = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        const { data } = await supabase
-          .from('profiles')
-          .select('address')
-          .eq('id', user.id)
-          .single();
+    if (categoriesQuery.error) {
+      const message = categoriesQuery.error instanceof Error ? categoriesQuery.error.message : "Gagal memuat kategori.";
+      console.error("Error fetching categories:", message);
+    }
+  }, [categoriesQuery.error]);
 
-        if (data?.address) setAlamat(data.address);
-        else setAlamat("Alamat belum diatur di profil");
-      }
-    };
-    fetchUserAddress();
-  }, []);
+  useEffect(() => {
+    if (addressQuery.data) {
+      setAlamat((current) => (current === "Memuat alamat..." ? addressQuery.data : current));
+    }
+  }, [addressQuery.data]);
+
+  useEffect(() => {
+    if (addressQuery.error) {
+      const message = addressQuery.error instanceof Error ? addressQuery.error.message : "Gagal memuat alamat.";
+      console.error("Error fetching user address:", message);
+      setAlamat("Alamat belum diatur di profil");
+    }
+  }, [addressQuery.error]);
 
   const handleFoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -102,16 +139,24 @@ export default function SetorSampah() {
 
       if (insertError) throw insertError;
 
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: userDashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: userProfileKeys.all }),
+        queryClient.invalidateQueries({ queryKey: userRiwayatKeys.all }),
+        queryClient.invalidateQueries({ queryKey: userQueryKeys.pickupAddress.all }),
+      ]);
+
       alert("Pengajuan berhasil dikirim!");
-      router.refresh();
       // Reset State
       setSelectedKategori("");
       setBerat("");
       setFoto(null);
       setPreview(null);
       setCatatan("");
-    } catch (error: any) {
-      alert("Gagal mengirim: " + error.message);
+      router.push("/user/setor");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Terjadi kesalahan saat mengirim setoran.";
+      alert("Gagal mengirim: " + message);
     } finally {
       setLoading(false);
     }
@@ -142,7 +187,7 @@ export default function SetorSampah() {
               >
                 <div className="w-10 h-10 mb-2 relative">
                   <img 
-                    src={item.image_url}
+                    src={item.image_url || undefined}
                     alt={item.name}
                     className={`w-full h-full object-contain transition-all duration-300 ${
                         selectedKategori === item.id ? "grayscale-0 scale-110" : "grayscale opacity-60"
