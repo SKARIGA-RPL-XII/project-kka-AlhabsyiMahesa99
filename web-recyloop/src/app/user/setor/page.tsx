@@ -1,21 +1,31 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { Plus, Search, Filter, Recycle, Clock, Package, Eye, Trash2 } from "lucide-react";
-import { supabase } from "@/lib/supabase"; 
+import { supabase } from "@/lib/supabase";
+import { userDashboardKeys } from "@/app/user/dashboard/hooks/dashboardQueries";
+import { userProfileKeys } from "@/app/user/profil/hooks/profileQueries";
+import { userRiwayatKeys } from "@/app/user/riwayat/hooks/riwayatQueries";
+import { USER_SETOR_ITEMS_PER_PAGE, fetchUserSetor, userSetorKeys } from "./hooks/setorQueries";
 
 export default function SetorSampah() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
-  const ITEMS_PER_PAGE = 5;
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalData, setTotalData] = useState(0);
-  const totalPages = Math.ceil(totalData / ITEMS_PER_PAGE);
-  
-  // State Management untuk data real dari DB] ---
-  const [pickups, setPickups] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState({ total: 0, weight: 0, pending: 0 });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const { data, isLoading } = useQuery({
+    queryKey: userSetorKeys.list(currentPage),
+    queryFn: () => fetchUserSetor(currentPage),
+    staleTime: 30 * 1000,
+  });
+
+  const pickups = data?.pickups || [];
+  const totalData = data?.totalData || 0;
+  const stats = data?.stats || { total: 0, weight: 0, pending: 0 };
+  const totalPages = Math.max(1, Math.ceil(totalData / USER_SETOR_ITEMS_PER_PAGE));
 
   // Helper format tanggal sesuai permintaan "24 Jan 2026"] ---
   const formatDate = (dateString: string) => {
@@ -33,100 +43,52 @@ export default function SetorSampah() {
     return `REC-${uuid.substring(0, 5).toUpperCase()}`;
   };
 
-  // Fetch Data & Logic Stats Real-time] ---
-  const fetchPickups = async () => {
-    setLoading(true);
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (user) {
-      // Hitung range
-      const from = (currentPage - 1) * ITEMS_PER_PAGE;
-      const to = from + ITEMS_PER_PAGE - 1;
-
-      const { data, error, count } = await supabase
-        .from("pickups")
-        .select(
-          `
-        *,
-        waste_categories(name)
-      `,
-          { count: "exact" },
-        ) // ambil total data
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .range(from, to); // pagination supabase
-
-      if (data) {
-        setPickups(data);
-        setTotalData(count || 0);
-
-        // Stats Mini TETAP dihitung dari SEMUA data
-        // Jadi kita fetch ulang TANPA pagination khusus stats
-        const { data: allData } = await supabase
-          .from("pickups")
-          .select("*")
-          .eq("user_id", user.id);
-
-        if (allData) {
-          const totalWeight = allData.reduce(
-            (acc, curr) =>
-              acc + (curr.total_weight || curr.estimated_weight || 0),
-            0,
-          );
-
-          const pendingCount = allData.filter(
-            (p) => p.status === "pending",
-          ).length;
-
-          setStats({
-            total: allData.length,
-            weight: totalWeight,
-            pending: pendingCount,
-          });
-        }
-      }
-
-      if (error) console.error("Error fetching pickups:", error.message);
-    }
-
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchPickups();
-  }, [currentPage]);
-
   // Fungsi Hapus - Proteksi hanya status 'pending'] ---
   const handleDelete = async (id: string) => {
     const confirmDelete = confirm("Apakah kamu yakin ingin membatalkan setoran ini?");
     if (!confirmDelete) return;
 
     try {
+      setDeletingId(id);
+
       const { error } = await supabase
-        .from('pickups')
+        .from("pickups")
         .delete()
-        .eq('id', id)
-        .eq('status', 'pending');
+        .eq("id", id)
+        .eq("status", "pending");
 
       if (error) throw error;
-      
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: userSetorKeys.all }),
+        queryClient.invalidateQueries({ queryKey: userDashboardKeys.all }),
+        queryClient.invalidateQueries({ queryKey: userProfileKeys.all }),
+        queryClient.invalidateQueries({ queryKey: userRiwayatKeys.all }),
+      ]);
+
       alert("Setoran berhasil dibatalkan.");
-      fetchPickups();
-    } catch (error: any) {
-      alert("Gagal menghapus: " + error.message);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Terjadi kesalahan saat membatalkan setoran.";
+      alert("Gagal menghapus: " + message);
+    } finally {
+      setDeletingId(null);
     }
   };
 
   const getStatusStyle = (status: string) => {
     switch (status) {
-      case 'completed': return 'bg-green-100 text-green-700';
-      case 'scheduled': return 'bg-blue-100 text-blue-700';
-      case 'picked_up': return 'bg-purple-100 text-purple-700';
-      case 'pending': return 'bg-orange-100 text-orange-700';
-      case 'cancelled': return 'bg-red-100 text-red-700';
-      default: return 'bg-gray-100 text-gray-700';
+      case "completed":
+        return "bg-green-100 text-green-700";
+      case "scheduled":
+        return "bg-blue-100 text-blue-700";
+      case "picked_up":
+        return "bg-purple-100 text-purple-700";
+      case "pending":
+        return "bg-orange-100 text-orange-700";
+      case "cancelled":
+        return "bg-red-100 text-red-700";
+      default:
+        return "bg-gray-100 text-gray-700";
     }
   };
 
@@ -215,7 +177,7 @@ export default function SetorSampah() {
         </div>
 
         <div className="overflow-x-auto">
-          {loading ? (
+          {isLoading ? (
             <div className="p-10 text-center text-gray-400 animate-pulse">
               Memuat data transaksi...
             </div>
@@ -290,6 +252,7 @@ export default function SetorSampah() {
                         {item.status === "pending" ? (
                           <button
                             onClick={() => handleDelete(item.id)}
+                            disabled={deletingId === item.id}
                             className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                             title="Batalkan Setoran"
                           >

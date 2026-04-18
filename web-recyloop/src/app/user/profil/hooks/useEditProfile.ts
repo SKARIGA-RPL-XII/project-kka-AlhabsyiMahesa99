@@ -1,7 +1,9 @@
 "use client";
 
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { fetchUserProfile, userProfileKeys } from "./profileQueries";
 
 export type EditProfileFormData = {
   full_name: string;
@@ -28,45 +30,37 @@ const initialFormData: EditProfileFormData = {
 };
 
 export function useEditProfile() {
-  const [loading, setLoading] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [formData, setFormData] = useState<EditProfileFormData>(initialFormData);
+  const queryClient = useQueryClient();
 
-  // 2. Ambil data profil saat halaman dibuka
+  const profileQuery = useQuery({
+    queryKey: userProfileKeys.detail("me"),
+    queryFn: () => fetchUserProfile(),
+    staleTime: 60 * 1000,
+  });
+
   useEffect(() => {
-    fetchProfile();
-  }, []);
+    const profile = profileQuery.data?.profile;
 
-  const fetchProfile = async () => {
-    try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+    if (!profile) return;
 
-      const { data, error } = await supabase.from("profiles").select("*").eq("id", user.id).single();
-      if (error) throw error;
-
-      if (data) {
-        setFormData({
-          full_name: data.full_name || "",
-          phone: data.phone || "",
-          email: user.email || "",
-          address: data.address || "",
-          district: data.district || "",
-          city: data.city || "",
-          latitude: data.latitude,
-          longitude: data.longitude,
-          avatar_url: data.avatar_url || "",
-        });
-        setPreviewUrl(data.avatar_url || `https://ui-avatars.com/api/?name=${data.full_name}&background=299E63&color=fff`);
-      }
-    } catch (error) {
-      console.error("Error loading profile:", error);
-    }
-  };
+    setFormData((prev) => ({
+      ...prev,
+      full_name: profile.full_name || "",
+      phone: profile.phone || "",
+      email: profile.email || "",
+      address: profile.address || "",
+      district: profile.district || "",
+      city: profile.city || "",
+      latitude: profile.latitude ?? null,
+      longitude: profile.longitude ?? null,
+      avatar_url: profile.avatar_url || "",
+    }));
+    setPreviewUrl(profile.avatar_url || `https://ui-avatars.com/api/?name=${profile.full_name}&background=299E63&color=fff`);
+  }, [profileQuery.data]);
 
   // 3. Fungsi Get Location (GPS)
   const getLocation = () => {
@@ -115,11 +109,8 @@ export function useEditProfile() {
   };
 
   // 4. Handle Save (Update Profile & Upload Foto)
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
+  const saveProfileMutation = useMutation({
+    mutationFn: async () => {
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -127,7 +118,6 @@ export function useEditProfile() {
 
       let currentAvatarUrl = formData.avatar_url;
 
-      // Proses Upload Foto jika ada file baru
       if (selectedFile) {
         const fileExt = selectedFile.name.split(".").pop();
         const fileName = `${user.id}/${Date.now()}.${fileExt}`;
@@ -142,7 +132,6 @@ export function useEditProfile() {
         currentAvatarUrl = publicUrl;
       }
 
-      // Update Tabel Profiles
       const { error: updateError } = await supabase
         .from("profiles")
         .update({
@@ -159,17 +148,26 @@ export function useEditProfile() {
         .eq("id", user.id);
 
       if (updateError) throw updateError;
+
+      await queryClient.invalidateQueries({ queryKey: userProfileKeys.all });
+      return { userId: user.id, avatarUrl: currentAvatarUrl };
+    },
+    onSuccess: () => {
       alert("Profil berhasil diperbarui!");
-    } catch (error: unknown) {
+    },
+    onError: (error: unknown) => {
       const message = error instanceof Error ? error.message : "Gagal menyimpan profil.";
       alert(message);
-    } finally {
-      setLoading(false);
-    }
+    },
+  });
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await saveProfileMutation.mutateAsync();
   };
 
   return {
-    loading,
+    loading: profileQuery.isLoading || saveProfileMutation.isPending,
     isLocating,
     formData,
     previewUrl,

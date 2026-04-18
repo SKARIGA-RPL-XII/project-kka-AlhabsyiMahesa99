@@ -8,7 +8,7 @@ import { useUserProfile } from "./hooks/useUserProfile";
 
 export default function ProfilPage() {
   const [isEditing, setIsEditing] = useState(false);
-  const { loading, profile, activities } = useUserProfile(isEditing);
+  const { loading, profile, activities } = useUserProfile();
 
   if (isEditing) {
     return (
