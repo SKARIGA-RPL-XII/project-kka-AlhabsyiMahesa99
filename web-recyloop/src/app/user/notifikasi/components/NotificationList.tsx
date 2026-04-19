@@ -60,7 +60,7 @@ export function NotificationList({
                       Sampah kamu berhasil diangkut
                     </p>
                     <p className="text-xs text-gray-500">
-                      ID: <span className="font-semibold">REC-{item.id.slice(0, 5).toUpperCase()}</span> •{" "}
+                      ID: <span className="font-semibold">REC-{item.id.slice(0, 5).toUpperCase()}</span> -{" "}
                       {formatDateTime(item.completed_at || item.created_at)}
                     </p>
                     <div className="flex flex-wrap items-center gap-3 text-xs text-gray-600">

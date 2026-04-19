@@ -97,6 +97,12 @@ export function useUserRewards() {
     setMessage(null);
     setProcessingRewardId(rewardId);
 
+    let lockedCodeId: number | null = null;
+    let rewardDataSnapshot: { id: number; stock: number | null } | null = null;
+    const currentPointsSnapshot = profile.total_points || 0;
+    let rewardStockChanged = false;
+    let profilePointsChanged = false;
+
     try {
       // 1) Ambil data reward terbaru
       const { data: rewardData, error: rewardError } = await supabase
@@ -113,8 +119,9 @@ export function useUserRewards() {
         throw new Error("Reward tidak tersedia atau stok habis.");
       }
 
-      const currentPoints = profile.total_points || 0;
-      if (currentPoints < rewardData.points_required) {
+      rewardDataSnapshot = { id: rewardData.id, stock: rewardData.stock };
+
+      if (currentPointsSnapshot < rewardData.points_required) {
         throw new Error("Poin kamu belum cukup untuk reward ini.");
       }
 
@@ -140,6 +147,7 @@ export function useUserRewards() {
         }
 
         assignedCode = codeData.code;
+        lockedCodeId = codeData.id;
 
         const { error: updateCodeError } = await supabase
           .from("reward_codes")
@@ -166,9 +174,10 @@ export function useUserRewards() {
       if (updateRewardError) {
         throw new Error(`Gagal update stok reward: ${updateRewardError.message}`);
       }
+      rewardStockChanged = true;
 
       // 4) Update poin user
-      const newPoints = currentPoints - rewardData.points_required;
+      const newPoints = currentPointsSnapshot - rewardData.points_required;
       const { error: updateProfileError } = await supabase
         .from("profiles")
         .update({ total_points: newPoints })
@@ -177,6 +186,7 @@ export function useUserRewards() {
       if (updateProfileError) {
         throw new Error(`Gagal update poin user: ${updateProfileError.message}`);
       }
+      profilePointsChanged = true;
 
       // 5) Insert log redemption untuk audit admin + detail user
       const { error: insertRedemptionError } = await supabase
@@ -209,6 +219,44 @@ export function useUserRewards() {
         queryClient.invalidateQueries({ queryKey: userProfileKeys.all }),
       ]);
     } catch (error: unknown) {
+      const rollbackTasks: Promise<unknown>[] = [];
+
+      if (profilePointsChanged) {
+        rollbackTasks.push(
+          (async () => {
+            await supabase.from("profiles").update({ total_points: currentPointsSnapshot }).eq("id", userId);
+          })(),
+        );
+      }
+
+      if (rewardStockChanged && rewardDataSnapshot) {
+        rollbackTasks.push(
+          (async () => {
+            await supabase.from("rewards").update({ stock: rewardDataSnapshot.stock }).eq("id", rewardDataSnapshot.id);
+          })(),
+        );
+      }
+
+      if (lockedCodeId) {
+        rollbackTasks.push(
+          (async () => {
+            await supabase
+              .from("reward_codes")
+              .update({ is_used: false, used_at: null })
+              .eq("id", lockedCodeId);
+          })(),
+        );
+      }
+
+      if (rollbackTasks.length > 0) {
+        const rollbackResults = await Promise.allSettled(rollbackTasks);
+        const failedRollback = rollbackResults.some((result) => result.status === "rejected");
+
+        if (failedRollback) {
+          console.error("Rollback redeem gagal sepenuhnya.", rollbackResults);
+        }
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : "Terjadi kesalahan saat redeem reward.";
       setMessage({ type: "error", text: errorMessage });

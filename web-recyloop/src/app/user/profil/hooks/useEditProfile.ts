@@ -34,6 +34,7 @@ export function useEditProfile() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [formData, setFormData] = useState<EditProfileFormData>(initialFormData);
+  const [hasHydratedForm, setHasHydratedForm] = useState(false);
   const queryClient = useQueryClient();
 
   const profileQuery = useQuery({
@@ -45,7 +46,7 @@ export function useEditProfile() {
   useEffect(() => {
     const profile = profileQuery.data?.profile;
 
-    if (!profile) return;
+    if (!profile || hasHydratedForm) return;
 
     setFormData((prev) => ({
       ...prev,
@@ -60,7 +61,8 @@ export function useEditProfile() {
       avatar_url: profile.avatar_url || "",
     }));
     setPreviewUrl(profile.avatar_url || `https://ui-avatars.com/api/?name=${profile.full_name}&background=299E63&color=fff`);
-  }, [profileQuery.data]);
+    setHasHydratedForm(true);
+  }, [hasHydratedForm, profileQuery.data]);
 
   // 3. Fungsi Get Location (GPS)
   const getLocation = () => {
@@ -153,6 +155,7 @@ export function useEditProfile() {
       return { userId: user.id, avatarUrl: currentAvatarUrl };
     },
     onSuccess: () => {
+      setHasHydratedForm(false);
       alert("Profil berhasil diperbarui!");
     },
     onError: (error: unknown) => {
