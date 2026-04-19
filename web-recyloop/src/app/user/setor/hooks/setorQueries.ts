@@ -27,13 +27,12 @@ export type UserSetorStats = {
 
 export type UserSetorQueryResult = {
   pickups: UserSetorPickup[];
-  totalData: number;
   stats: UserSetorStats;
 };
 
 export const userSetorKeys = userQueryKeys.setor;
 
-export async function fetchUserSetor(currentPage: number): Promise<UserSetorQueryResult> {
+export async function fetchUserSetor(): Promise<UserSetorQueryResult> {
   const {
     data: { user },
     error: userError,
@@ -43,13 +42,9 @@ export async function fetchUserSetor(currentPage: number): Promise<UserSetorQuer
   if (!user) {
     return {
       pickups: [],
-      totalData: 0,
       stats: { total: 0, weight: 0, pending: 0 },
     };
   }
-
-  const from = (currentPage - 1) * USER_SETOR_ITEMS_PER_PAGE;
-  const to = from + USER_SETOR_ITEMS_PER_PAGE - 1;
 
   const [pickupsRes, allPickupsRes] = await Promise.all([
     supabase
@@ -59,11 +54,9 @@ export async function fetchUserSetor(currentPage: number): Promise<UserSetorQuer
           *,
           waste_categories(name)
         `,
-        { count: "exact" },
       )
       .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .range(from, to),
+      .order("created_at", { ascending: false }),
     supabase.from("pickups").select("status, total_weight, estimated_weight").eq("user_id", user.id),
   ]);
 
@@ -76,7 +69,6 @@ export async function fetchUserSetor(currentPage: number): Promise<UserSetorQuer
 
   return {
     pickups: (pickupsRes.data as UserSetorPickup[]) || [],
-    totalData: pickupsRes.count || 0,
     stats: {
       total: allPickups.length,
       weight: totalWeight,
