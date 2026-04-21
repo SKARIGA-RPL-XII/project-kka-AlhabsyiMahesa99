@@ -37,7 +37,6 @@ export default function SidebarUser() {
     document.cookie = "user-role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC; SameSite=Lax";
 
     // 3. Lempar ke halaman login
-    // Pastikan path-nya benar, kalau folder kamu (auth)/login, biasanya routenya /login
     router.push("/login"); 
     router.refresh(); // Paksa refresh biar middleware ngecek ulang kondisi kosongan
   };

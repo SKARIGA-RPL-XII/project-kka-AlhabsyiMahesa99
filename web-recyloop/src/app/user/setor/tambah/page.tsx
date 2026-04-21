@@ -8,6 +8,7 @@ import { userDashboardKeys } from "@/app/user/dashboard/hooks/dashboardQueries";
 import { userProfileKeys } from "@/app/user/profil/hooks/profileQueries";
 import { userRiwayatKeys } from "@/app/user/riwayat/hooks/riwayatQueries";
 import { userQueryKeys } from "@/app/user/queryKeys";
+import { fetchUserSetor, userSetorKeys } from "../hooks/setorQueries";
 
 type WasteCategory = {
   id: string;
@@ -140,10 +141,15 @@ export default function SetorSampah() {
       if (insertError) throw insertError;
 
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: userSetorKeys.all }),
         queryClient.invalidateQueries({ queryKey: userDashboardKeys.all }),
         queryClient.invalidateQueries({ queryKey: userProfileKeys.all }),
         queryClient.invalidateQueries({ queryKey: userRiwayatKeys.all }),
         queryClient.invalidateQueries({ queryKey: userQueryKeys.pickupAddress.all }),
+        queryClient.prefetchQuery({
+          queryKey: userSetorKeys.all,
+          queryFn: fetchUserSetor,
+        }),
       ]);
 
       alert("Pengajuan berhasil dikirim!");

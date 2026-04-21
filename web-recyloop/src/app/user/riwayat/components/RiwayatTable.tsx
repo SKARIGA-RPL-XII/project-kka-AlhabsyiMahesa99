@@ -31,7 +31,7 @@ export function RiwayatTable({
           <div className="p-10 text-center text-sm italic text-gray-500">Belum ada riwayat setoran.</div>
         ) : (
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-gray-50 text-xs uppercase tracking-wider text-gray-400">
+            <thead className="bg-gray-50 text-sm uppercase tracking-wider text-gray-400">
               <tr>
                 <th className="px-6 py-3">ID / Waktu Request</th>
                 <th className="px-6 py-3">Kategori</th>
