@@ -1,44 +1,128 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { adminQueryKeys } from "@/app/admin/queryKeys";
 import { AuditSummary, RedemptionQueryRow, RedemptionRow, Reward } from "../types/reward";
 
 const ITEMS_PER_PAGE = 5;
 
+const pickFirstRelation = <T,>(value: T | T[] | null | undefined): T | null => {
+  if (!value) return null;
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+};
+
+async function fetchRewards(): Promise<Reward[]> {
+  const { data, error } = await supabase
+    .from("rewards")
+    .select(
+      "id, title, description, reward_category, partner_name, redemption_note, fulfillment_type, points_required, amount_value, stock, is_active, image_url, created_at",
+    )
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data as Reward[]) || [];
+}
+
+async function fetchRedemptions(currentPage: number): Promise<{ rows: RedemptionRow[]; totalData: number }> {
+  const from = (currentPage - 1) * ITEMS_PER_PAGE;
+  const to = from + ITEMS_PER_PAGE - 1;
+
+  const { data, error, count } = await supabase
+    .from("redemptions")
+    .select(
+      `
+        id,
+        points_spent,
+        amount_added,
+        status,
+        fulfillment_status,
+        fulfillment_code,
+        created_at,
+        profiles:profiles!redemptions_user_id_fkey(full_name, email),
+        rewards:rewards!redemptions_reward_id_fkey(title, reward_category)
+      `,
+      { count: "exact" },
+    )
+    .order("created_at", { ascending: false })
+    .range(from, to);
+
+  if (error) throw error;
+
+  const rows: RedemptionRow[] = ((data as RedemptionQueryRow[]) || []).map((row) => ({
+    id: row.id,
+    points_spent: row.points_spent,
+    amount_added: row.amount_added,
+    status: row.status,
+    fulfillment_status: row.fulfillment_status,
+    fulfillment_code: row.fulfillment_code,
+    created_at: row.created_at,
+    profile: pickFirstRelation(row.profiles),
+    reward: pickFirstRelation(row.rewards),
+  }));
+
+  return {
+    rows,
+    totalData: count || 0,
+  };
+}
+
+async function fetchMonthlyAudit(): Promise<AuditSummary> {
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  const { data, error } = await supabase
+    .from("redemptions")
+    .select("points_spent, amount_added")
+    .eq("status", "completed")
+    .gte("created_at", monthStart);
+
+  if (error) throw error;
+
+  const pointsSpent = (data || []).reduce((acc, item) => acc + (item.points_spent || 0), 0);
+  const amountAdded = (data || []).reduce((acc, item) => acc + (item.amount_added || 0), 0);
+
+  return {
+    pointsSpent,
+    amountAdded,
+    totalTx: (data || []).length,
+  };
+}
+
 export function useRewardAdmin() {
-  // State data utama
-  const [rewards, setRewards] = useState<Reward[]>([]);
-  const [redemptions, setRedemptions] = useState<RedemptionRow[]>([]);
-
-  // State loading
-  const [loadingRewards, setLoadingRewards] = useState(true);
-  const [loadingRedemptions, setLoadingRedemptions] = useState(true);
-
-  // State pagination log transaksi
   const [currentPage, setCurrentPage] = useState(1);
-  const [totalData, setTotalData] = useState(0);
-
-  // State feedback UI
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
-
-  // State modal edit katalog
   const [editingReward, setEditingReward] = useState<Reward | null>(null);
   const [editStock, setEditStock] = useState(0);
   const [editPoints, setEditPoints] = useState(0);
+  const queryClient = useQueryClient();
 
-  // State audit bulanan
-  const [monthlyAudit, setMonthlyAudit] = useState<AuditSummary>({
+  const rewardsQuery = useQuery({
+    queryKey: adminQueryKeys.reward.catalog,
+    queryFn: fetchRewards,
+    staleTime: 60 * 1000,
+  });
+
+  const redemptionsQuery = useQuery({
+    queryKey: adminQueryKeys.reward.transactions(currentPage),
+    queryFn: () => fetchRedemptions(currentPage),
+    staleTime: 30 * 1000,
+  });
+
+  const monthlyAuditQuery = useQuery({
+    queryKey: adminQueryKeys.reward.audit("monthly"),
+    queryFn: fetchMonthlyAudit,
+    staleTime: 60 * 1000,
+  });
+
+  const rewards = rewardsQuery.data || [];
+  const redemptions = redemptionsQuery.data?.rows || [];
+  const totalData = redemptionsQuery.data?.totalData || 0;
+  const monthlyAudit = monthlyAuditQuery.data || {
     pointsSpent: 0,
     amountAdded: 0,
     totalTx: 0,
-  });
-
-  const totalPages = Math.ceil(totalData / ITEMS_PER_PAGE);
-
-  // Helper normalisasi relasi Supabase: bisa object atau array tergantung bentuk join.
-  const pickFirstRelation = <T,>(value: T | T[] | null | undefined): T | null => {
-    if (!value) return null;
-    return Array.isArray(value) ? (value[0] ?? null) : value;
   };
+  const totalPages = Math.ceil(totalData / ITEMS_PER_PAGE);
 
   // Generate kode otomatis untuk menambah pool kode saat stok reward bertipe code dinaikkan.
   const generateAutoCodes = (count: number, reward: Reward): string[] => {
@@ -57,117 +141,6 @@ export function useRewardAdmin() {
 
     return Array.from(generated);
   };
-
-  // Fetch katalog reward
-  const fetchRewards = useCallback(async () => {
-    setLoadingRewards(true);
-
-    const { data, error } = await supabase
-      .from("rewards")
-      .select(
-        "id, title, description, reward_category, partner_name, redemption_note, fulfillment_type, points_required, amount_value, stock, is_active, image_url, created_at",
-      )
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      setMessage({ type: "error", text: `Gagal memuat katalog reward: ${error.message}` });
-    } else {
-      setRewards((data as Reward[]) || []);
-    }
-
-    setLoadingRewards(false);
-  }, []);
-
-  // Fetch log transaksi (pagination Supabase, maksimal 5 data per halaman)
-  const fetchRedemptions = useCallback(async () => {
-    setLoadingRedemptions(true);
-
-    const from = (currentPage - 1) * ITEMS_PER_PAGE;
-    const to = from + ITEMS_PER_PAGE - 1;
-
-    const { data, error, count } = await supabase
-      .from("redemptions")
-      .select(
-        `
-          id,
-          points_spent,
-          amount_added,
-          status,
-          fulfillment_status,
-          fulfillment_code,
-          created_at,
-          profiles:profiles!redemptions_user_id_fkey(full_name, email),
-          rewards:rewards!redemptions_reward_id_fkey(title, reward_category)
-        `,
-        { count: "exact" },
-      )
-      .order("created_at", { ascending: false })
-      .range(from, to);
-
-    if (error) {
-      setMessage({ type: "error", text: `Gagal memuat log transaksi: ${error.message}` });
-    } else {
-      // Normalisasi hasil join Supabase ke bentuk row tabel UI.
-      const normalizedRows: RedemptionRow[] = ((data as RedemptionQueryRow[]) || []).map((row) => ({
-        id: row.id,
-        points_spent: row.points_spent,
-        amount_added: row.amount_added,
-        status: row.status,
-        fulfillment_status: row.fulfillment_status,
-        fulfillment_code: row.fulfillment_code,
-        created_at: row.created_at,
-        profile: pickFirstRelation(row.profiles),
-        reward: pickFirstRelation(row.rewards),
-      }));
-
-      setRedemptions(normalizedRows);
-      setTotalData(count || 0);
-    }
-
-    setLoadingRedemptions(false);
-  }, [currentPage]);
-
-  // Hitung ringkasan audit dari semua data bulan berjalan
-  const fetchMonthlyAudit = useCallback(async () => {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
-
-    const { data, error } = await supabase
-      .from("redemptions")
-      .select("points_spent, amount_added")
-      .eq("status", "completed")
-      .gte("created_at", monthStart);
-
-    if (error) return;
-
-    const pointsSpent = (data || []).reduce((acc, item) => acc + (item.points_spent || 0), 0);
-    const amountAdded = (data || []).reduce((acc, item) => acc + (item.amount_added || 0), 0);
-
-    setMonthlyAudit({
-      pointsSpent,
-      amountAdded,
-      totalTx: (data || []).length,
-    });
-  }, []);
-
-  // Load data awal
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchRewards();
-      fetchMonthlyAudit();
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [fetchMonthlyAudit, fetchRewards]);
-
-  // Reload data log setiap page berubah
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchRedemptions();
-    }, 0);
-
-    return () => clearTimeout(timer);
-  }, [fetchRedemptions]);
 
   // Katalog menampilkan semua reward (aktif + nonaktif)
   const catalogRewards = useMemo(() => rewards, [rewards]);
@@ -265,7 +238,11 @@ export function useRewardAdmin() {
 
     setMessage({ type: "success", text: "Reward berhasil diperbarui." });
     setEditingReward(null);
-    await fetchRewards();
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.reward.catalog }),
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.reward.audit("monthly") }),
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.reward.transactions(currentPage) }),
+    ]);
   };
 
   // Handler toggle status aktif reward (aktif <-> nonaktif)
@@ -295,14 +272,14 @@ export function useRewardAdmin() {
         : "Reward berhasil dinonaktifkan.",
     });
 
-    await fetchRewards();
+    await queryClient.invalidateQueries({ queryKey: adminQueryKeys.reward.catalog });
   };
 
   return {
     rewards,
     redemptions,
-    loadingRewards,
-    loadingRedemptions,
+    loadingRewards: rewardsQuery.isLoading,
+    loadingRedemptions: redemptionsQuery.isLoading,
     currentPage,
     setCurrentPage,
     totalPages,

@@ -1,6 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
+import { useRouter } from "next/navigation";
+import { AddRewardCategoryModal } from "./components/AddRewardCategoryModal";
 import { RewardAuditStats } from "./components/RewardAuditStats";
 import { RewardCatalog } from "./components/RewardCatalog";
 import { RewardHeader } from "./components/RewardHeader";
@@ -9,6 +11,8 @@ import { EditRewardModal } from "./components/EditRewardModal";
 import { useRewardAdmin } from "./hooks/useRewardAdmin";
 
 export default function RewardManagementPage() {
+  const router = useRouter();
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
   const {
     redemptions,
     loadingRewards,
@@ -56,6 +60,8 @@ export default function RewardManagementPage() {
       <RewardHeader
         title="Manajemen Reward"
         subtitle="Kelola katalog reward agar terasa nyata: kategori jelas, partner jelas, dan detail klaim jelas."
+        onAddCategory={() => setShowAddCategoryModal(true)}
+        onAddReward={() => router.push("/admin/reward/tambah")}
       />
 
       {/* Alert Message */}
@@ -105,6 +111,8 @@ export default function RewardManagementPage() {
         onCancel={() => setEditingReward(null)}
         onSave={handleSaveEdit}
       />
+
+      <AddRewardCategoryModal open={showAddCategoryModal} onClose={() => setShowAddCategoryModal(false)} />
     </div>
   );
 }

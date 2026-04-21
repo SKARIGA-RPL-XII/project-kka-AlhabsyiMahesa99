@@ -1,10 +1,13 @@
 "use client";
-import React, { useState } from "react";
+import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { adminQueryKeys } from "@/app/admin/queryKeys";
 import { ArrowLeft, Save, Image as ImageIcon, BadgeDollarSign, Box, X } from "lucide-react";
 import { createCategory } from "../createCategoryHandler";
 
 export default function TambahKategori() {
+  const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [points, setPoints] = useState<number>(0);
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -44,6 +47,7 @@ export default function TambahKategori() {
         imageFile,
       });
 
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.master.categories });
       alert("Berhasil menambahkan kategori baru!");
       router.push("/admin/master");
     } catch (error) {

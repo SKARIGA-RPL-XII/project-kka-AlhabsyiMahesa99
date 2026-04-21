@@ -1,14 +1,67 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase";
+import { adminQueryKeys } from "@/app/admin/queryKeys";
 import { MONTH_OPTIONS, REPORT_ITEMS_PER_PAGE } from "../constants/report";
 import { formatDateTime, pickFirstRelation } from "../utils/reportFormat";
 import { PeriodType, ReportMessage, ReportPickupRow, ReportRedemptionRow, ReportSummary } from "../types/report";
 
+type ReportQueryResult = {
+  summary: ReportSummary;
+  redemptionsRows: ReportRedemptionRow[];
+};
+
+async function fetchAdminReportData(periodRange: { startIso: string; endIso: string }): Promise<ReportQueryResult> {
+  const { data: pickupsData, error: pickupsError } = await supabase
+    .from("pickups")
+    .select(
+      "id, created_at, status, total_weight, total_points_earned, estimated_weight, profiles:profiles!pickups_user_id_fkey(full_name, email)",
+    )
+    .gte("created_at", periodRange.startIso)
+    .lte("created_at", periodRange.endIso)
+    .order("created_at", { ascending: false });
+
+  if (pickupsError) throw pickupsError;
+
+  const { data: redemptionsData, error: redemptionsError } = await supabase
+    .from("redemptions")
+    .select(
+      "id, created_at, points_spent, amount_added, status, fulfillment_status, profiles:profiles!redemptions_user_id_fkey(full_name, email), rewards:rewards!redemptions_reward_id_fkey(title, reward_category)",
+    )
+    .gte("created_at", periodRange.startIso)
+    .lte("created_at", periodRange.endIso)
+    .order("created_at", { ascending: false });
+
+  if (redemptionsError) throw redemptionsError;
+
+  const typedPickups = (pickupsData as ReportPickupRow[]) || [];
+  const typedRedemptions = (redemptionsData as ReportRedemptionRow[]) || [];
+  const completedPickups = typedPickups.filter((item) => item.status === "completed").length;
+  const totalWeight = typedPickups.reduce((acc, item) => acc + (item.total_weight || item.estimated_weight || 0), 0);
+  const totalPointsEarned = typedPickups.reduce((acc, item) => acc + (item.total_points_earned || 0), 0);
+  const totalPointsSpent = typedRedemptions.reduce((acc, item) => acc + (item.points_spent || 0), 0);
+  const totalAmountAdded = typedRedemptions.reduce((acc, item) => acc + (item.amount_added || 0), 0);
+
+  return {
+    summary: {
+      totalPickups: typedPickups.length,
+      completedPickups,
+      totalWeight,
+      totalPointsEarned,
+      totalRedemptions: typedRedemptions.length,
+      totalPointsSpent,
+      totalAmountAdded,
+    },
+    redemptionsRows: typedRedemptions,
+  };
+}
+
 export function useAdminReport() {
   const now = new Date();
+  const queryClient = useQueryClient();
 
   // State filter periode laporan
   const [periodType, setPeriodType] = useState<PeriodType>("monthly");
@@ -77,56 +130,14 @@ export function useAdminReport() {
     setMessage(null);
 
     try {
-      // 1) Ambil pickups pada periode terpilih
-      const { data: pickupsData, error: pickupsError } = await supabase
-        .from("pickups")
-        .select(
-          "id, created_at, status, total_weight, total_points_earned, estimated_weight, profiles:profiles!pickups_user_id_fkey(full_name, email)",
-        )
-        .gte("created_at", periodRange.startIso)
-        .lte("created_at", periodRange.endIso)
-        .order("created_at", { ascending: false });
-
-      if (pickupsError) throw pickupsError;
-
-      // 2) Ambil redemptions pada periode terpilih
-      const { data: redemptionsData, error: redemptionsError } = await supabase
-        .from("redemptions")
-        .select(
-          "id, created_at, points_spent, amount_added, status, fulfillment_status, profiles:profiles!redemptions_user_id_fkey(full_name, email), rewards:rewards!redemptions_reward_id_fkey(title, reward_category)",
-        )
-        .gte("created_at", periodRange.startIso)
-        .lte("created_at", periodRange.endIso)
-        .order("created_at", { ascending: false });
-
-      if (redemptionsError) throw redemptionsError;
-
-      const typedPickups = (pickupsData as ReportPickupRow[]) || [];
-      const typedRedemptions = (redemptionsData as ReportRedemptionRow[]) || [];
-
-      // 3) Hitung summary laporan
-      const completedPickups = typedPickups.filter((item) => item.status === "completed").length;
-      const totalWeight = typedPickups.reduce(
-        (acc, item) => acc + (item.total_weight || item.estimated_weight || 0),
-        0,
-      );
-      const totalPointsEarned = typedPickups.reduce(
-        (acc, item) => acc + (item.total_points_earned || 0),
-        0,
-      );
-      const totalPointsSpent = typedRedemptions.reduce((acc, item) => acc + (item.points_spent || 0), 0);
-      const totalAmountAdded = typedRedemptions.reduce((acc, item) => acc + (item.amount_added || 0), 0);
-
-      setSummary({
-        totalPickups: typedPickups.length,
-        completedPickups,
-        totalWeight,
-        totalPointsEarned,
-        totalRedemptions: typedRedemptions.length,
-        totalPointsSpent,
-        totalAmountAdded,
+      const result = await queryClient.fetchQuery({
+        queryKey: adminQueryKeys.laporan.report(periodType, selectedYear, selectedMonth),
+        queryFn: () => fetchAdminReportData(periodRange),
+        staleTime: 5 * 60 * 1000,
       });
-      setRedemptionsRows(typedRedemptions);
+
+      setSummary(result.summary);
+      setRedemptionsRows(result.redemptionsRows);
       setCurrentReportPage(1);
       setReportReady(true);
       setMessage({ type: "success", text: `Laporan periode ${periodRange.label} berhasil digenerate.` });

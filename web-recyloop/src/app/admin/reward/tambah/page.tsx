@@ -1,9 +1,11 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Plus } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { adminQueryKeys } from "@/app/admin/queryKeys";
 
 const REWARD_IMAGE_BUCKET = "reward-images";
 
@@ -18,10 +20,7 @@ type FulfillmentType = "code" | "manual";
 
 export default function AddRewardPage() {
   const router = useRouter();
-
-  // State kategori dari tabel reward_categories
-  const [categories, setCategories] = useState<RewardCategory[]>([]);
-  const [loadingCategories, setLoadingCategories] = useState(true);
+  const queryClient = useQueryClient();
 
   // State form tambah reward
   const [title, setTitle] = useState("");
@@ -41,28 +40,26 @@ export default function AddRewardPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // Fetch kategori aktif
-  useEffect(() => {
-    const fetchCategories = async () => {
-      setLoadingCategories(true);
-
+  const { data: categories = [], isLoading: loadingCategories } = useQuery({
+    queryKey: adminQueryKeys.reward.categories,
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("reward_categories")
         .select("id, name, description, is_active")
         .eq("is_active", true)
         .order("name", { ascending: true });
 
-      if (!error && data && data.length > 0) {
-        const typedCategories = data as RewardCategory[];
-        setCategories(typedCategories);
-        setRewardCategory(typedCategories[0].name);
-      }
+      if (error) throw error;
+      return (data as RewardCategory[]) || [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
 
-      setLoadingCategories(false);
-    };
-
-    fetchCategories();
-  }, []);
+  useEffect(() => {
+    if (!rewardCategory && categories.length > 0) {
+      setRewardCategory(categories[0].name);
+    }
+  }, [categories, rewardCategory]);
 
   // Parse kode dari textarea (1 kode per baris)
   const parseCodes = (rawText: string): string[] => {
@@ -187,6 +184,11 @@ export default function AddRewardPage() {
     }
 
     setMessage({ type: "success", text: "Reward berhasil ditambahkan." });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.reward.catalog }),
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.reward.transactions(1) }),
+      queryClient.invalidateQueries({ queryKey: adminQueryKeys.reward.audit("monthly") }),
+    ]);
     setSubmitting(false);
     router.push("/admin/reward");
   };
@@ -260,7 +262,7 @@ export default function AddRewardPage() {
               />
             )}
             <p className="mt-1 text-xs text-gray-500">
-              Jika belum ada kategori, tambahkan dulu di halaman Tambah Kategori.
+              Jika belum ada kategori, tambahkan dulu lewat tombol `Tambah Kategori` di halaman reward.
             </p>
           </div>
 
