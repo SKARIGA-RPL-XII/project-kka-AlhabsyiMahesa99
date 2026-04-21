@@ -1,14 +1,13 @@
-import { useRouter } from "next/navigation";
 import { Plus, Tags } from "lucide-react";
 
 type Props = {
   title: string;
   subtitle: string;
+  onAddCategory: () => void;
+  onAddReward: () => void;
 };
 
-export function RewardHeader({ title, subtitle }: Props) {
-  const router = useRouter();
-
+export function RewardHeader({ title, subtitle, onAddCategory, onAddReward }: Props) {
   return (
     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
       <div>
@@ -20,13 +19,13 @@ export function RewardHeader({ title, subtitle }: Props) {
       {/* Header CTA: dipaksa sejajar */}
       <div className="ml-auto flex flex-row flex-nowrap items-center gap-3">
         <button
-          onClick={() => router.push("/admin/reward/kategori/tambah")}
+          onClick={onAddCategory}
           className="cursor-pointer inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
         >
           <Tags size={16} /> Tambah Kategori
         </button>
         <button
-          onClick={() => router.push("/admin/reward/tambah")}
+          onClick={onAddReward}
           className="cursor-pointer inline-flex items-center gap-2 rounded-xl bg-[#299E63] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#238b56]"
         >
           <Plus size={16} /> Tambah Reward

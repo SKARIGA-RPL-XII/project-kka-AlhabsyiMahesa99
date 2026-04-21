@@ -41,10 +41,19 @@ export function EditRewardModal({
           <div>
             <label className="text-sm font-semibold">Harga Poin</label>
             <input
-              type="number"
-              min={0}
-              value={editPoints}
-              onChange={(e) => onChangePoints(Number(e.target.value))}
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              value={editPoints === 0 ? "" : editPoints}
+              onChange={(e) => {
+                let value = e.target.value;
+
+                // hanya angka
+                value = value.replace(/[^0-9]/g, "");
+
+                onChangePoints(value === "" ? 0 : Number(value));
+              }}
+              placeholder="Masukkan poin"
               className="mt-1 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#299E63] focus:outline-none"
             />
           </div>

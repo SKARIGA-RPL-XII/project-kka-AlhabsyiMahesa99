@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
+import { adminQueryKeys } from "@/app/admin/queryKeys";
 
 export type UserRoleTab = "user" | "kurir";
 
@@ -20,16 +22,51 @@ export interface SuspendTarget {
   role: "user" | "kurir";
 }
 
+type UsersQueryResult = {
+  users: UserProfile[];
+  suspensionReasons: Record<string, string>;
+};
+
+async function fetchUsersByRole(activeTab: UserRoleTab): Promise<UsersQueryResult> {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, phone, role, is_active, avatar_url, address")
+    .eq("role", activeTab)
+    .order("full_name", { ascending: true });
+
+  if (error) throw error;
+
+  const users = (data as UserProfile[]) || [];
+  const userIds = users.map((user) => user.id);
+
+  if (userIds.length === 0) {
+    return { users, suspensionReasons: {} };
+  }
+
+  const { data: sanctionData, error: sanctionError } = await supabase
+    .from("user_sanctions")
+    .select("user_id, reason, created_at")
+    .in("user_id", userIds)
+    .order("created_at", { ascending: false });
+
+  if (sanctionError) throw sanctionError;
+
+  const suspensionReasons: Record<string, string> = {};
+  for (const row of sanctionData || []) {
+    if (!suspensionReasons[row.user_id]) {
+      suspensionReasons[row.user_id] = row.reason;
+    }
+  }
+
+  return { users, suspensionReasons };
+}
+
 export function useUsers() {
-  const [users, setUsers] = useState<UserProfile[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<UserRoleTab>("user");
   const [searchTerm, setSearchTerm] = useState<string>("");
-
   const [suspendTarget, setSuspendTarget] = useState<SuspendTarget | null>(null);
   const [suspendReason, setSuspendReason] = useState("");
   const [submittingSuspend, setSubmittingSuspend] = useState(false);
-
   const [showAddCourierModal, setShowAddCourierModal] = useState(false);
   const [creatingCourier, setCreatingCourier] = useState(false);
   const [courierForm, setCourierForm] = useState({
@@ -39,60 +76,13 @@ export function useUsers() {
     phone: "",
     address: "",
   });
+  const queryClient = useQueryClient();
 
-  const [suspensionReasons, setSuspensionReasons] = useState<Record<string, string>>({});
-
-  const loadSuspensionReasons = useCallback(async (userIds: string[]) => {
-    if (userIds.length === 0) {
-      setSuspensionReasons({});
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("user_sanctions")
-      .select("user_id, reason, created_at")
-      .in("user_id", userIds)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.error("Error loading sanction reasons:", error.message);
-      return;
-    }
-
-    const latestMap: Record<string, string> = {};
-    for (const row of data || []) {
-      if (!latestMap[row.user_id]) {
-        latestMap[row.user_id] = row.reason;
-      }
-    }
-
-    setSuspensionReasons(latestMap);
-  }, []);
-
-  const fetchUsers = useCallback(async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, phone, role, is_active, avatar_url, address")
-        .eq("role", activeTab)
-        .order("full_name", { ascending: true });
-
-      if (error) throw error;
-      const result = (data as UserProfile[]) || [];
-      setUsers(result);
-      await loadSuspensionReasons(result.map((u) => u.id));
-    } catch (error) {
-      console.error("Error fetching users:", error);
-      alert("Gagal mengambil data pengguna");
-    } finally {
-      setLoading(false);
-    }
-  }, [activeTab, loadSuspensionReasons]);
-
-  useEffect(() => {
-    fetchUsers();
-  }, [fetchUsers]);
+  const usersQuery = useQuery({
+    queryKey: adminQueryKeys.users.list(activeTab),
+    queryFn: () => fetchUsersByRole(activeTab),
+    staleTime: 60 * 1000,
+  });
 
   const handleActivateUser = async (userId: string) => {
     if (!confirm("Aktifkan kembali akun ini?")) return;
@@ -105,7 +95,7 @@ export function useUsers() {
 
       if (error) throw error;
 
-      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, is_active: true } : u)));
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users.list(activeTab) });
       alert("Akun berhasil diaktifkan kembali.");
     } catch (error) {
       console.error(error);
@@ -151,22 +141,7 @@ export function useUsers() {
         console.error("Failed to store sanction reason:", sanctionError.message);
       }
 
-      setUsers((prev) =>
-        prev.map((u) =>
-          u.id === suspendTarget.id
-            ? {
-                ...u,
-                is_active: false,
-              }
-            : u,
-        ),
-      );
-
-      setSuspensionReasons((prev) => ({
-        ...prev,
-        [suspendTarget.id]: reason,
-      }));
-
+      await queryClient.invalidateQueries({ queryKey: adminQueryKeys.users.list(activeTab) });
       alert("Akun berhasil dinonaktifkan.");
       setSuspendTarget(null);
       setSuspendReason("");
@@ -235,9 +210,10 @@ export function useUsers() {
         address: "",
       });
 
-      if (activeTab === "kurir") {
-        fetchUsers();
-      }
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.users.all }),
+        queryClient.invalidateQueries({ queryKey: adminQueryKeys.dashboard.all }),
+      ]);
     } catch (error: any) {
       console.error(error);
       alert("Gagal menambahkan kurir: " + (error?.message || "Unknown error"));
@@ -247,6 +223,7 @@ export function useUsers() {
   };
 
   const filteredUsers = useMemo(() => {
+    const users = usersQuery.data?.users || [];
     const q = searchTerm.toLowerCase();
     return users.filter(
       (user) =>
@@ -254,11 +231,11 @@ export function useUsers() {
         user.phone?.includes(searchTerm) ||
         user.email?.toLowerCase().includes(q),
     );
-  }, [users, searchTerm]);
+  }, [usersQuery.data?.users, searchTerm]);
 
   return {
     users: filteredUsers,
-    loading,
+    loading: usersQuery.isLoading,
     activeTab,
     setActiveTab,
     searchTerm,
@@ -273,7 +250,7 @@ export function useUsers() {
     courierForm,
     setCourierForm,
     creatingCourier,
-    suspensionReasons,
+    suspensionReasons: usersQuery.data?.suspensionReasons || {},
     handleActivateUser,
     handleOpenSuspendModal,
     handleSuspendUser,
